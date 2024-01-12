@@ -106,6 +106,10 @@ class myDriver(Driver):
    
       return value
 
+   def write(self, reason, value):
+      # disable PV write (caput)
+      return True
+
 if __name__ == '__main__':
    parser = argparse.ArgumentParser()
    parser.add_argument('-p', '--prefix', action='store', help='EPICS PV prefix (default: \'ZYNQ:\')', default="ZYNQ:")
