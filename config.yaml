@@ -1,0 +1,11 @@
+---
+
+- epics:
+    # $HOSTNAME: machine hostname
+    prefix: "$hostname:ZYNQ:"
+    
+- http:
+    enable: on
+    url: "https://telegraf:8186/write"
+    username: "myuser"
+    password: "mypass"

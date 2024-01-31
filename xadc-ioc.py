@@ -1,7 +1,16 @@
 #!/usr/bin/env python3
 
-import argparse
+import re
+import sys
+import yaml
+import socket
+import requests
+import threading
+
 from pcaspy import SimpleServer, Driver
+from epics import PV
+
+requests.packages.urllib3.disable_warnings()
 
 iiodev = "/sys/bus/iio/devices/iio:device0/"
 
@@ -109,14 +118,79 @@ class myDriver(Driver):
    def write(self, reason, value):
       # disable PV write (caput)
       return True
+class HttpThread(threading.Thread):
+   def __init__(self, kwargs=None):
+      threading.Thread.__init__(self, args=(), kwargs=None)
+         
+      self.name = "HttpThread"
+      self.hostname = kwargs['hostname']
+      self.url = kwargs['url']
+      self.username = kwargs.get('username', None)
+      self.password = kwargs.get('password', None)
+      self.pvprefix = kwargs['pvprefix']
+      self.payloads = []
+      self.pvs = []
+      self.mutex = threading.Lock()
+      self.daemon = True
+   
+   def run(self):
+      print(f'{threading.current_thread().name}')
+
+      # wait for PV valid values
+      time.sleep(2)
+
+      while True:
+   
+         # relax CPU
+         time.sleep(2)
+
+      print(f'{threading.current_thread().name} exit')
 
 if __name__ == '__main__':
-   parser = argparse.ArgumentParser()
-   parser.add_argument('-p', '--prefix', action='store', help='EPICS PV prefix (default: \'ZYNQ:\')', default="ZYNQ:")
-   args = parser.parse_args()
+
+   # get hostname
+   hostname = socket.gethostname().split(".")[0] 
+
+   # default PVs prefix
+   prefix = "PS:"
+
+   threads = []
+
+   config = {}
+   try:
+      with open(f"{sys.path[0]}/config.yaml", "r") as stream:
+         try:
+            config = yaml.safe_load(stream)
+         except yaml.YAMLError as e:
+            print(e) 
+            exit(-1)
+         else:
+            for section in config:
+
+               if 'epics' in section:
+                  # resolve macro
+                  prefix = section['epics'].get('prefix', 'ZYNQ:')
+                  prefix = re.sub('\$hostname', hostname, prefix.lower()).upper()
+
+               if 'http' in section:
+                  if section['http'].get('enable', False):
+                     args = {}
+                     args['hostname'] = hostname
+                     args['url'] = section['http'].get('url', None)
+                     if args['url'] is None:
+                        print("ERROR: HTTP section enabled but 'url' parameter is not provided")
+                        exit(-1)
+                     args['username'] = section['http'].get('username', None)
+                     args['password'] = section['http'].get('password', None)
+                     args['pvprefix'] = prefix
+                     threads.append(HttpThread(kwargs=args))
+
+   except (FileNotFoundError, PermissionError) as e:
+      print(f'WARNING: {e} - running with defaults')
+      pass
 
    server = SimpleServer()
-   server.createPV(args.prefix, pvdb)
+   server.createPV(prefix, pvdb)
    driver = myDriver()
 
    # process CA transactions
