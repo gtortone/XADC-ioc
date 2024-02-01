@@ -3,6 +3,7 @@
 import re
 import sys
 import yaml
+import time
 import socket
 import requests
 import threading
@@ -118,6 +119,8 @@ class myDriver(Driver):
    def write(self, reason, value):
       # disable PV write (caput)
       return True
+
+
 class HttpThread(threading.Thread):
    def __init__(self, kwargs=None):
       threading.Thread.__init__(self, args=(), kwargs=None)
@@ -139,12 +142,48 @@ class HttpThread(threading.Thread):
       # wait for PV valid values
       time.sleep(2)
 
+      for k,v in pvdb.items():
+         p = PV(f'{self.pvprefix}{k}')
+         p.add_callback(self.get_influx_payload)
+         self.pvs.append(p)
+
+      httperror = False
+
       while True:
-   
-         # relax CPU
-         time.sleep(2)
+         if len(self.payloads) >= 100:
+            with self.mutex:
+               try:
+                  res = requests.post(self.url, auth=(self.username, self.password), data='\n'.join(self.payloads[0:100]), verify=False)
+               except Exception as e:
+                  if httperror == False:
+                     print(f'{time.ctime()}: {e}')
+                     httperror = True
+               else:
+                  if httperror == True:
+                     print(f'{time.ctime()}: HTTP connection recovered')
+                     httperror = False
+                  if res.ok == True and res.status_code != 400:
+                     del(self.payloads[0:100])
+                  else:
+                     print(f'{time.ctime()}: HTTP error {res.text}')
+      
+            if len(self.payloads) >= 100:
+               # there are payloads waiting to be sent
+               time.sleep(0.1)
+            else:
+               # relax CPU
+               time.sleep(2)
 
       print(f'{threading.current_thread().name} exit')
+
+   def get_influx_payload(self, pvname=None, value=None, char_value=None, **kw):
+      metric = pvname.split(':')[2].lower()
+      timestamp = int(kw['timestamp'] * 1E9)
+
+      payload = f'xadc_host,host={self.hostname},type={metric} value={value}'
+
+      with self.mutex:
+         self.payloads.append(payload)
 
 if __name__ == '__main__':
 
@@ -152,7 +191,7 @@ if __name__ == '__main__':
    hostname = socket.gethostname().split(".")[0] 
 
    # default PVs prefix
-   prefix = "PS:"
+   prefix = "ZYNQ:"
 
    threads = []
 
@@ -193,6 +232,14 @@ if __name__ == '__main__':
    server.createPV(prefix, pvdb)
    driver = myDriver()
 
+   for t in threads:
+      t.start()
+
    # process CA transactions
    while True:
-      server.process(0.1)
+      try:
+         server.process(0.1)
+      except KeyboardInterrupt:
+         print("Ctrl+C pressed...")
+         del(server)
+         break;
