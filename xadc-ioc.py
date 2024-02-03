@@ -128,6 +128,7 @@ class HttpThread(threading.Thread):
       self.name = "HttpThread"
       self.hostname = kwargs['hostname']
       self.url = kwargs['url']
+      self.session = requests.Session()
       self.username = kwargs.get('username', None)
       self.password = kwargs.get('password', None)
       self.pvprefix = kwargs['pvprefix']
@@ -153,11 +154,14 @@ class HttpThread(threading.Thread):
 
       httperror = False
 
+      self.session.auth = (self.username, self.password)
+      self.session.verify = False
+
       while True:
          if len(self.payloads) >= 100:
             with self.mutex:
                try:
-                  res = requests.post(self.url, auth=(self.username, self.password), data='\n'.join(self.payloads[0:100]), verify=False)
+                  res = self.session.post(self.url, data='\n'.join(self.payloads[0:100]))
                except Exception as e:
                   if httperror == False:
                      print(f'{time.ctime()}: {e}')
@@ -171,12 +175,12 @@ class HttpThread(threading.Thread):
                   else:
                      print(f'{time.ctime()}: HTTP error {res.text}')
       
-            if len(self.payloads) >= 100:
-               # there are payloads waiting to be sent
-               time.sleep(0.1)
-            else:
-               # relax CPU
-               time.sleep(2)
+         if len(self.payloads) >= 100:
+            # there are payloads waiting to be sent
+            time.sleep(1)
+         else:
+            # relax CPU
+            time.sleep(2)
 
       print(f'{threading.current_thread().name} exit')
 
