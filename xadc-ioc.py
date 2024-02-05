@@ -185,7 +185,7 @@ class HttpThread(threading.Thread):
       print(f'{threading.current_thread().name} exit')
 
    def get_influx_payload(self, pvname=None, value=None, char_value=None, **kw):
-      metric = pvname.split(':')[2].lower()
+      metric = pvname.split(':')[-1].lower()
       timestamp = int(kw['timestamp'] * 1E9)
 
       payload = f'xadc_host,host={self.hostname},type={metric} value={value}'
