@@ -7,6 +7,7 @@ import time
 import socket
 import requests
 import threading
+import psutil, os
 
 from pcaspy import SimpleServer, Driver
 from epics import PV
@@ -190,7 +191,9 @@ class HttpThread(threading.Thread):
 
       payload = f'xadc_host,host={self.hostname},type={metric} value={value}'
 
-      if sys.getsizeof(self.payloads) < self.maxmem:
+      process = psutil.Process(os.getpid())
+      #if sys.getsizeof(self.payloads) < self.maxmem:
+      if process.memory_info().rss < self.maxmem:
          if self.lowmem == True:
             print(f'INFO: data collection restored')
             self.lowmem = False
